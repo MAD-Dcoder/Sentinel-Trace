@@ -1,0 +1,18 @@
+# Ambientes virtuais e cache
+venv/
+__pycache__/
+.pytest_cache/
+
+# Dados corporativos confidenciais (CRÍTICO)
+data/
+crops/
+*.mp4
+*.avi
+*.jpg
+
+# Banco de dados
+db/*.db
+*.sqlite3
+
+# Configurações locais
+.env    
