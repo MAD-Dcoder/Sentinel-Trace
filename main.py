@@ -1,11 +1,33 @@
-import numpy as np
-from pipeline.tracker_pipeline import VideoTrackingPipeline
+"""
+Ponto de entrada do Sentinel-Trace para testes operacionais.
+"""
 
-pipeline = VideoTrackingPipeline(camera_id="Cam_01_Doca")
+from pathlib import Path
+from pipeline.video_stream import VideoStreamProcessor
+from config.settings import DATA_DIR
 
-# Frame de teste preto com um rectângulo branco para simular conteúdo
-test_frame = np.zeros((480, 640, 3), dtype=np.uint8)
-cv2_frame, detections_count = pipeline.process_frame(test_frame)
+def run_test():
+    # Procura se existe algum vídeo de teste na pasta data/
+    video_files = list(DATA_DIR.glob("*.mp4")) + list(DATA_DIR.glob("*.avi"))
 
-print(f"Pipeline operacional para a câmara: {pipeline.camera_id}")
-print(f"Frame processado com sucesso! Deteções encontradas: {detections_count}")
+    if video_files:
+        test_video = video_files[0]
+        print(f"Vídeo de teste detectado na pasta data: {test_video.name}")
+        processor = VideoStreamProcessor(
+            source=test_video,
+            camera_id="Cam_01_Armazem",
+            frame_skip=2
+        )
+    else:
+        print("Nenhum ficheiro de vídeo encontrado em data/. Tentando abrir a webcam padrão (índice 0)...")
+        processor = VideoStreamProcessor(
+            source=0,
+            camera_id="Cam_01_Webcam",
+            frame_skip=2
+        )
+
+    # Executa o processamento com exibição visual na tela
+    processor.run(display=True)
+
+if __name__ == "__main__":
+    run_test()

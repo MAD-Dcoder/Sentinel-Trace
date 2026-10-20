@@ -1,27 +1,22 @@
 """
-Módulo de Gestão de Rastreio Cross-Camera - Sentinel-Trace.
-Mantém o registo de identidades globais e associa indivíduos entre câmaras distintas.
+Módulo de Rastreio Cross-Camera - Sentinel-Trace.
+Mapeia trajetórias locais persistentes a identidades corporativas globais.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 import numpy as np
 from config.settings import REID_SIMILARITY_THRESHOLD
 
 
 class GlobalTracker:
-    def __init__(self, similarity_threshold: float = REID_SIMILARITY_THRESHOLD):
-        """
-        Gere a base de identidades globais observadas no sistema de vigilância.
-        """
+    def __init__(self, similarity_threshold: float = 0.70):
         self.similarity_threshold = similarity_threshold
         self.global_tracks = {}  # {global_id: {"embedding": np.ndarray, "history": list}}
+        self.local_to_global_map = {}  # {(camera_id, local_id): global_id}
         self.next_global_id = 1
 
     @staticmethod
     def cosine_similarity(v1: np.ndarray, v2: np.ndarray) -> float:
-        """
-        Calcula a similaridade por cosseno entre dois vetores normalizados.
-        """
         dot_product = np.dot(v1, v2)
         norm_v1 = np.linalg.norm(v1)
         norm_v2 = np.linalg.norm(v2)
@@ -29,49 +24,50 @@ class GlobalTracker:
             return 0.0
         return float(dot_product / (norm_v1 * norm_v2))
 
-    def update_track(self, camera_id: str, local_track_id: int, embedding: np.ndarray, bbox: list, crop: np.ndarray = None) -> int:
-        """
-        Recebe uma deteção com vetor corporal e atribui ou atualiza um ID global.
-        """
+    def resolve_global_identity(self, camera_id: str, local_id: int, embedding: np.ndarray, bbox: list) -> int:
+        track_key = (camera_id, local_id)
+        timestamp = datetime.now(timezone.utc).isoformat()
+        entry = {
+            "timestamp": timestamp,
+            "camera_id": camera_id,
+            "local_track_id": local_id,
+            "bbox": bbox
+        }
+
+        # 1. Se o ByteTrack já travou este indivíduo nesta câmara, mantém o mesmo Global ID estritamente
+        if track_key in self.local_to_global_map:
+            global_id = self.local_to_global_map[track_key]
+            # Atualiza o vetor de forma suave
+            self.global_tracks[global_id]["embedding"] = (
+                0.90 * self.global_tracks[global_id]["embedding"] + 0.10 * embedding
+            )
+            norm = np.linalg.norm(self.global_tracks[global_id]["embedding"])
+            if norm > 0:
+                self.global_tracks[global_id]["embedding"] /= norm
+
+            self.global_tracks[global_id]["history"].append(entry)
+            return global_id
+
+        # 2. Primeira vez que este local_id surge: busca na galeria global por afinidade de aparência
         best_id = None
         best_sim = -1.0
-
-        # Procura a identidade mais próxima na base global
         for gid, data in self.global_tracks.items():
             sim = self.cosine_similarity(embedding, data["embedding"])
             if sim > best_sim:
                 best_sim = sim
                 best_id = gid
 
-        timestamp = datetime.utcnow().isoformat()
-        detection_entry = {
-            "timestamp": timestamp,
-            "camera_id": camera_id,
-            "local_track_id": local_track_id,
-            "bbox": bbox,
-            "crop": crop
-        }
-
-        # Associa à identidade existente se ultrapassar o limiar de afinidade
         if best_sim >= self.similarity_threshold and best_id is not None:
             assigned_id = best_id
-            # Atualização suave do vetor da pessoa com média móvel exponencial
-            self.global_tracks[assigned_id]["embedding"] = (
-                0.85 * self.global_tracks[assigned_id]["embedding"] + 0.15 * embedding
-            )
-            # Re-normalização L2
-            norm = np.linalg.norm(self.global_tracks[assigned_id]["embedding"])
-            if norm > 0:
-                self.global_tracks[assigned_id]["embedding"] /= norm
-
-            self.global_tracks[assigned_id]["history"].append(detection_entry)
+            self.global_tracks[assigned_id]["history"].append(entry)
         else:
-            # Cria um novo indivíduo no circuito do Sentinel-Trace
             assigned_id = self.next_global_id
             self.global_tracks[assigned_id] = {
                 "embedding": embedding.copy(),
-                "history": [detection_entry]
+                "history": [entry]
             }
             self.next_global_id += 1
 
+        # Fixa o mapeamento
+        self.local_to_global_map[track_key] = assigned_id
         return assigned_id
