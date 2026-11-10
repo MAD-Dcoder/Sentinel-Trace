@@ -1,0 +1,37 @@
+================================================================================
+🛡️  SENTINEL-TRACE — RAIO-X DA INVESTIGAÇÃO (LOG FORENSE LP)
+================================================================================
+Total de Capturas Gravadas : 1047
+Alvos Relevantes Rastreados: 5 -> [3, 4, 5, 6, 7] (Ruídos < 6 frames ocultados)
+Câmaras Analisadas         : 5
+--------------------------------------------------------------------------------
+
+🎯 ALVO GLOBAL #3 (Total: 14 frames | 1 câmara(s))
+   Rota Descoberta: cam_02_corredor_externo
+   • cam_02_corredor_externo              | Tempo:   1.2s | Frames:  14 | Rastros: [1] | ✅ [Normal]
+
+🎯 ALVO GLOBAL #4 (Total: 43 frames | 1 câmara(s))
+   Rota Descoberta: cam_02_corredor_externo
+   • cam_02_corredor_externo              | Tempo:  14.9s | Frames:  43 | Rastros: [2, 3, 4] | 🚨 [ALERTA LP - PERMANÊNCIA]
+
+🎯 ALVO GLOBAL #5 (Total: 963 frames | 3 câmara(s))
+   Rota Descoberta: cam_03_garagem_passagem ➔ cam_04_garagem_furto_camisa_branca ➔ cam_05_garagem_furto_roupao
+   • cam_03_garagem_passagem              | Tempo:  15.6s | Frames: 189 | Rastros: [1, 4] | 🚨 [ALERTA LP - PERMANÊNCIA]
+   • cam_04_garagem_furto_camisa_branca   | Tempo:  46.5s | Frames: 563 | Rastros: [4] | 🚨 [ALERTA LP - PERMANÊNCIA]
+   • cam_05_garagem_furto_roupao          | Tempo:  14.7s | Frames: 211 | Rastros: [1] | 🚨 [ALERTA LP - PERMANÊNCIA]
+   🔗 Confiança do Match Cross-Camera (ReID):
+      ↳ Transição [cam_03_garagem_passagem] ➔ [cam_04_garagem_furto_camisa_branca]: 88.5% de compatibilidade visual
+      ↳ Transição [cam_04_garagem_furto_camisa_branca] ➔ [cam_05_garagem_furto_roupao]: 61.6% de compatibilidade visual
+
+🎯 ALVO GLOBAL #6 (Total: 6 frames | 2 câmara(s))
+   Rota Descoberta: cam_03_garagem_passagem ➔ cam_04_garagem_furto_camisa_branca
+   • cam_03_garagem_passagem              | Tempo:   0.1s | Frames:   2 | Rastros: [3] | ✅ [Normal]
+   • cam_04_garagem_furto_camisa_branca   | Tempo:   3.8s | Frames:   4 | Rastros: [1] | ✅ [Normal]
+   🔗 Confiança do Match Cross-Camera (ReID):
+      ↳ Transição [cam_03_garagem_passagem] ➔ [cam_04_garagem_furto_camisa_branca]: 94.0% de compatibilidade visual
+
+🎯 ALVO GLOBAL #7 (Total: 19 frames | 1 câmara(s))
+   Rota Descoberta: cam_05_garagem_furto_roupao
+   • cam_05_garagem_furto_roupao          | Tempo:   1.3s | Frames:  19 | Rastros: [2] | ✅ [Normal]
+
+================================================================================

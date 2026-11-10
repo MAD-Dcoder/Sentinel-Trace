@@ -1,73 +1,94 @@
 """
-Módulo de Rastreio Cross-Camera - Sentinel-Trace.
-Mapeia trajetórias locais persistentes a identidades corporativas globais.
+Módulo de Rastreio Cross-Camera e Anti-Colisão - Sentinel-Trace.
 """
 
 from datetime import datetime, timezone
 import numpy as np
-from config.settings import REID_SIMILARITY_THRESHOLD
 
 
 class GlobalTracker:
-    def __init__(self, similarity_threshold: float = 0.70):
+    def __init__(self, similarity_threshold: float = 0.72):
         self.similarity_threshold = similarity_threshold
-        self.global_tracks = {}  # {global_id: {"embedding": np.ndarray, "history": list}}
-        self.local_to_global_map = {}  # {(camera_id, local_id): global_id}
+        self.global_tracks = {}           # {global_id: {"embedding": np.ndarray, "history": list}}
+        self.local_to_global = {}         # {(camera_id, local_id): global_id}
         self.next_global_id = 1
 
     @staticmethod
     def cosine_similarity(v1: np.ndarray, v2: np.ndarray) -> float:
-        dot_product = np.dot(v1, v2)
-        norm_v1 = np.linalg.norm(v1)
-        norm_v2 = np.linalg.norm(v2)
-        if norm_v1 == 0 or norm_v2 == 0:
+        dot = float(np.dot(v1, v2))
+        n1 = float(np.linalg.norm(v1))
+        n2 = float(np.linalg.norm(v2))
+        if n1 == 0.0 or n2 == 0.0:
             return 0.0
-        return float(dot_product / (norm_v1 * norm_v2))
+        return dot / (n1 * n2)
 
-    def resolve_global_identity(self, camera_id: str, local_id: int, embedding: np.ndarray, bbox: list) -> int:
-        track_key = (camera_id, local_id)
+    def update_frame(self, camera_id: str, detections: list):
+        """
+        Garante que CADA pessoa visível no mesmo frame tenha um ID Global único.
+        """
+        used_global_ids_in_frame = set()
         timestamp = datetime.now(timezone.utc).isoformat()
-        entry = {
-            "timestamp": timestamp,
-            "camera_id": camera_id,
-            "local_track_id": local_id,
-            "bbox": bbox
-        }
+        unmapped_detections = []
 
-        # 1. Se o ByteTrack já travou este indivíduo nesta câmara, mantém o mesmo Global ID estritamente
-        if track_key in self.local_to_global_map:
-            global_id = self.local_to_global_map[track_key]
-            # Atualiza o vetor de forma suave
-            self.global_tracks[global_id]["embedding"] = (
-                0.90 * self.global_tracks[global_id]["embedding"] + 0.10 * embedding
-            )
-            norm = np.linalg.norm(self.global_tracks[global_id]["embedding"])
-            if norm > 0:
-                self.global_tracks[global_id]["embedding"] /= norm
+        # 1. Mantém quem já tinha rastro local ativo no ByteTrack
+        for det in detections:
+            key = (camera_id, det["local_id"])
+            if key in self.local_to_global:
+                gid = self.local_to_global[key]
+                # Se por algum erro de oclusão o ID já está em uso por outra pessoa neste frame, desvincula
+                if gid not in used_global_ids_in_frame:
+                    det["global_id"] = gid
+                    used_global_ids_in_frame.add(gid)
+                    # Atualiza o vetor suavemente
+                    self.global_tracks[gid]["embedding"] = (
+                        0.90 * self.global_tracks[gid]["embedding"] + 0.10 * det["embedding"]
+                    )
+                    norm = np.linalg.norm(self.global_tracks[gid]["embedding"])
+                    if norm > 0:
+                        self.global_tracks[gid]["embedding"] /= norm
+                else:
+                    unmapped_detections.append(det)
+            else:
+                unmapped_detections.append(det)
 
-            self.global_tracks[global_id]["history"].append(entry)
-            return global_id
+        # 2. Para novos rastros locais, busca no banco APENAS entre IDs que NÃO estão na tela agora
+        for det in unmapped_detections:
+            emb = det["embedding"]
+            best_gid = None
+            best_sim = -1.0
 
-        # 2. Primeira vez que este local_id surge: busca na galeria global por afinidade de aparência
-        best_id = None
-        best_sim = -1.0
-        for gid, data in self.global_tracks.items():
-            sim = self.cosine_similarity(embedding, data["embedding"])
-            if sim > best_sim:
-                best_sim = sim
-                best_id = gid
+            for gid, data in self.global_tracks.items():
+                if gid in used_global_ids_in_frame:
+                    continue  # REGRA DE OURO: A mesma pessoa não pode estar em 2 lugares ao mesmo tempo!
 
-        if best_sim >= self.similarity_threshold and best_id is not None:
-            assigned_id = best_id
-            self.global_tracks[assigned_id]["history"].append(entry)
-        else:
-            assigned_id = self.next_global_id
-            self.global_tracks[assigned_id] = {
-                "embedding": embedding.copy(),
-                "history": [entry]
-            }
-            self.next_global_id += 1
+                sim = self.cosine_similarity(emb, data["embedding"])
+                if sim > best_sim:
+                    best_sim = sim
+                    best_gid = gid
 
-        # Fixa o mapeamento
-        self.local_to_global_map[track_key] = assigned_id
-        return assigned_id
+            if best_sim >= self.similarity_threshold and best_gid is not None:
+                assigned_gid = best_gid
+            else:
+                assigned_gid = self.next_global_id
+                self.global_tracks[assigned_gid] = {
+                    "embedding": emb.copy(),
+                    "history": []
+                }
+                self.next_global_id += 1
+
+            key = (camera_id, det["local_id"])
+            self.local_to_global[key] = assigned_gid
+            used_global_ids_in_frame.add(assigned_gid)
+            det["global_id"] = assigned_gid
+
+        # 3. Registra histórico
+        for det in detections:
+            gid = det["global_id"]
+            self.global_tracks[gid]["history"].append({
+                "timestamp": timestamp,
+                "camera_id": camera_id,
+                "local_track_id": det["local_id"],
+                "bbox": det["bbox"]
+            })
+
+        return detections
