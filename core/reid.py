@@ -1,102 +1,60 @@
 """
-Módulo de Extração Biométrica e Atributos Visuais (Part-Based ReID) - Sentinel-Trace.
-Projetado para câmaras de galpão logístico (baixa resolução, ângulo alto e EPIs).
-Divide o corpo em Cabeça, Tronco e Pernas, extraindo cor (HSV), textura profunda e biotipo.
+Extrator de ReID — Sentinel-Trace.
+
+OSNet-AIN x1.0 treinada no MSMT17 (pedestres, 4.101 identidades, 15 câmeras).
+Diferente da ResNet18/ImageNet + histograma de cor anterior, ela foi treinada para
+separar PESSOAS diferentes — e não objetos — mesmo com roupas parecidas (uniformes).
+
+Pesos: torchreid model zoo (MIT). Ver config.settings.REID_WEIGHTS_URL.
 """
 
 import cv2
 import numpy as np
 import torch
-import torch.nn as nn
-from torchvision import models, transforms
-from config.settings import REID_IMG_SIZE
+
+from config.settings import REID_WEIGHTS, REID_WEIGHTS_URL, REID_IMG_SIZE, REID_BATCH
+from core.models.osnet_ain import osnet_ain_x1_0
+
+_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
 
-class FeatureExtractor:
-    def __init__(self, device: str = None):
-        self.device = torch.device(device if device else ("cuda" if torch.cuda.is_available() else "cpu"))
+class ReIDExtractor:
+    dim = 512
 
-        # Usamos as camadas intermediárias da ResNet18 (capturam melhor texturas de roupas, cabelo e acessórios)
-        backbone = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-        self.model = nn.Sequential(*list(backbone.children())[:-1]).to(self.device)
-        self.model.eval()
+    def __init__(self, weights=REID_WEIGHTS, device: str | None = None):
+        if not weights.exists():
+            raise FileNotFoundError(
+                f"Pesos de ReID não encontrados em {weights}.\n"
+                f"Baixe com:\n  curl -L -o \"{weights}\" \"{REID_WEIGHTS_URL}\""
+            )
+        self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        state = torch.load(weights, map_location="cpu", weights_only=True)
+        state = {k.replace("module.", ""): v for k, v in state.get("state_dict", state).items()}
+        state = {k: v for k, v in state.items() if not k.startswith("classifier")}
 
-        self.transform = transforms.Compose([
-            transforms.ToPILImage(),
-            transforms.Resize(REID_IMG_SIZE),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ])
+        self.model = osnet_ain_x1_0(num_classes=1, pretrained=False, loss="softmax")
+        missing = [k for k in self.model.load_state_dict(state, strict=False).missing_keys
+                   if not k.startswith("classifier")]
+        if missing:
+            raise RuntimeError(f"Pesos de ReID incompatíveis, faltando: {missing[:5]}")
+        self.model.to(self.device).eval()
 
-    def _extract_part_color_hist(self, part_bgr: np.ndarray) -> np.ndarray:
-        """
-        Extrai assinatura de cor invariante à iluminação (HSV) de uma parte específica do corpo.
-        Essencial para diferenciar colete, boné, tom de pele e cor de roupa em câmaras distantes.
-        """
-        if part_bgr is None or part_bgr.size == 0:
-            return np.zeros(48, dtype=np.float32)
+    def _prep(self, crop_bgr: np.ndarray) -> np.ndarray:
+        h, w = REID_IMG_SIZE
+        rgb = cv2.cvtColor(cv2.resize(crop_bgr, (w, h), interpolation=cv2.INTER_LINEAR), cv2.COLOR_BGR2RGB)
+        return ((rgb.astype(np.float32) / 255.0 - _MEAN) / _STD).transpose(2, 0, 1)
 
-        hsv = cv2.cvtColor(part_bgr, cv2.COLOR_BGR2HSV)
-        # Histograma de Matiz (Cor pura), Saturação e Brilho
-        hist_h = cv2.calcHist([hsv], [0], None, [16], [0, 180]).flatten()
-        hist_s = cv2.calcHist([hsv], [1], None, [16], [0, 256]).flatten()
-        hist_v = cv2.calcHist([hsv], [2], None, [16], [0, 256]).flatten()
-
-        hist = np.concatenate([hist_h, hist_s, hist_v]).astype(np.float32)
-        norm = np.linalg.norm(hist)
-        if norm > 0:
-            hist /= norm
-        return hist
-
-    def extract(self, crop: np.ndarray) -> np.ndarray:
-        """
-        Gera um vetor híbrido de 512 dimensões combinando:
-        - Fatiamento Horizontal (Cabeça/Boné, Tronco/Colete, Pernas/Calçado)
-        - Textura neural (ResNet)
-        - Proporção física (Biotipo)
-        """
-        if crop is None or crop.size == 0:
-            return np.zeros(512, dtype=np.float32)
-
-        h, w = crop.shape[:2]
-
-        # 1. Fatiamento Corporal (Recorta o fundo das bordas laterais em 15% para focar só na pessoa)
-        margin_x = int(w * 0.15)
-        core_crop = crop[:, margin_x:max(margin_x + 1, w - margin_x)] if w > 20 else crop
-
-        head_part = core_crop[0:max(1, int(h * 0.22)), :]              # Cabeça, cabelo, boné
-        torso_part = core_crop[int(h * 0.22):max(2, int(h * 0.65)), :]  # Camisa, colete, braços/tatuagens
-        legs_part = core_crop[int(h * 0.65):h, :]                       # Calça, bermuda, calçado
-
-        hist_head = self._extract_part_color_hist(head_part)    # 48 dims
-        hist_torso = self._extract_part_color_hist(torso_part)  # 48 dims
-        hist_legs = self._extract_part_color_hist(legs_part)    # 48 dims
-
-        # 2. Extração de textura profunda (padrões de roupa, cabelo longo/curto, silhueta)
-        rgb_crop = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
-        tensor = self.transform(rgb_crop).unsqueeze(0).to(self.device)
-
-        with torch.no_grad():
-            deep_feat = self.model(tensor).view(1, -1).cpu().numpy()[0]  # 512 dims
-            # Centraliza e normaliza a feature profunda para não esmagar as diferenças
-            deep_feat = deep_feat - np.mean(deep_feat)
-            d_norm = np.linalg.norm(deep_feat)
-            if d_norm > 0:
-                deep_feat /= d_norm
-
-        # Reduzimos a parte profunda para 368 posições e somamos os 144 das 3 partes do corpo = 512 dims cravados
-        deep_subset = deep_feat[:368] * 0.45  # Peso de 45% para textura geral
-        color_parts = np.concatenate([
-            hist_head * 0.25,   # Cabeça/Boné/Cabelo
-            hist_torso * 0.55,  # Tronco/Colete tem o maior peso discriminativo
-            hist_legs * 0.35    # Pernas/Calça
-        ])
-
-        combined = np.concatenate([color_parts, deep_subset]).astype(np.float32)
-
-        # Normalização final L2
-        final_norm = np.linalg.norm(combined)
-        if final_norm > 0:
-            combined /= final_norm
-
-        return combined
+    @torch.no_grad()
+    def extract_batch(self, crops: list[np.ndarray]) -> np.ndarray:
+        """Retorna (N, 512) L2-normalizado. Crops vazios viram vetor zero."""
+        out = np.zeros((len(crops), self.dim), dtype=np.float32)
+        valid = [i for i, c in enumerate(crops) if c is not None and c.size > 0]
+        for s in range(0, len(valid), REID_BATCH):
+            idx = valid[s:s + REID_BATCH]
+            batch = torch.from_numpy(np.stack([self._prep(crops[i]) for i in idx])).to(self.device)
+            # Média com o flip horizontal: pose espelhada não deve mudar a identidade
+            feats = self.model(batch) + self.model(torch.flip(batch, dims=[3]))
+            feats = torch.nn.functional.normalize(feats, dim=1)
+            out[idx] = feats.cpu().numpy()
+        return out

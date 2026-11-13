@@ -7,12 +7,20 @@ __pycache__/
 data/
 crops/
 *.mp4
+*.MP4
 *.avi
 *.jpg
 
-# Banco de dados
+# Casos de investigação (bancos + recortes de pessoas = dado biométrico)
+casos/
+
+# Bancos de dados
 db/*.db
 *.sqlite3
 
+# Pesos de modelos (baixar/exportar conforme README)
+/models/
+*.pt
+
 # Configurações locais
-.env    
+.env

@@ -1,96 +1,94 @@
 """
-Módulo Inspetor de Auditoria (Raio-X Forense) - Sentinel-Trace.
-Filtra ruídos de borda e calcula permanência exata e compatibilidade ReID entre câmaras.
+Relatório forense de uma caçada — Sentinel-Trace.
+
+Rota do alvo em ordem cronológica real, probabilidade de cada trecho, quem decidiu,
+candidatos rejeitados/não aceitos (auditoria) e prancha de evidências (JPG).
 """
 
-import sqlite3
+import json
+from datetime import datetime
+from pathlib import Path
+
+import cv2
 import numpy as np
-import pandas as pd
-from config.settings import DB_DIR, BASE_DIR
+
+from db.database import CaseDB
 
 
-def cosine_sim(v1: np.ndarray, v2: np.ndarray) -> float:
-    n1, n2 = np.linalg.norm(v1), np.linalg.norm(v2)
-    if n1 == 0 or n2 == 0:
-        return 0.0
-    return float(np.dot(v1, v2) / (n1 * n2))
+def hms(ts: float) -> str:
+    return datetime.fromtimestamp(ts).strftime("%H:%M:%S")
 
 
-def export_investigation_summary(dwell_threshold: float = 8.0, min_frames_valid: int = 6) -> str:
-    db_path = DB_DIR / "sentinel.db"
-    if not db_path.exists():
-        msg = "[AVISO] Banco sentinel.db ainda não existe."
-        print(msg)
-        return msg
-
-    conn = sqlite3.connect(db_path)
-    df = pd.read_sql_query("SELECT * FROM events ORDER BY id ASC", conn)
-    conn.close()
-
-    if df.empty:
-        msg = "[AVISO] O banco sentinel.db está vazio."
-        print(msg)
-        return msg
-
-    df["dt"] = pd.to_datetime(df["timestamp"])
-
-    # Filtra IDs que apareceram por menos de 'min_frames_valid' no total (descarta ruídos de borda de tela)
-    valid_gids = [gid for gid, g in df.groupby("global_id") if len(g) >= min_frames_valid]
-
-    lines = []
-    lines.append("=" * 80)
-    lines.append("🛡️  SENTINEL-TRACE — RAIO-X DA INVESTIGAÇÃO (LOG FORENSE LP)")
-    lines.append("=" * 80)
-    lines.append(f"Total de Capturas Gravadas : {len(df)}")
-    lines.append(f"Alvos Relevantes Rastreados: {len(valid_gids)} -> {valid_gids} (Ruídos < {min_frames_valid} frames ocultados)")
-    lines.append(f"Câmaras Analisadas         : {df['camera_id'].nunique()}")
-    lines.append("-" * 80)
-
-    for gid in valid_gids:
-        p_df = df[df["global_id"] == gid]
-        cams_visited = []
-        for c in p_df["camera_id"]:
-            if not cams_visited or cams_visited[-1] != c:
-                cams_visited.append(c)
-
-        lines.append(f"\n🎯 ALVO GLOBAL #{gid} (Total: {len(p_df)} frames | {len(cams_visited)} câmara(s))")
-        lines.append(f"   Rota Descoberta: {' ➔ '.join(cams_visited)}")
-
-        cam_embeddings = {}
-        for cam_id, group in p_df.groupby("camera_id", sort=False):
-            t_in = group["dt"].min()
-            t_out = group["dt"].max()
-            dwell = (t_out - t_in).total_seconds()
-            local_ids = sorted(group["local_track_id"].unique().tolist())
-            status = "🚨 [ALERTA LP - PERMANÊNCIA]" if dwell >= dwell_threshold else "✅ [Normal]"
-
-            embs = [np.frombuffer(b, dtype=np.float32) for b in group["embedding"] if b is not None]
-            if embs:
-                cam_embeddings[cam_id] = np.mean(embs, axis=0)
-
-            lines.append(
-                f"   • {cam_id:<36} | Tempo: {dwell:>5.1f}s | Frames: {len(group):>3} | "
-                f"Rastros: {local_ids} | {status}"
-            )
-
-        cam_keys = list(cam_embeddings.keys())
-        if len(cam_keys) > 1:
-            lines.append("   🔗 Confiança do Match Cross-Camera (ReID):")
-            for i in range(len(cam_keys) - 1):
-                c1, c2 = cam_keys[i], cam_keys[i + 1]
-                sim = cosine_sim(cam_embeddings[c1], cam_embeddings[c2]) * 100
-                lines.append(f"      ↳ Transição [{c1}] ➔ [{c2}]: {sim:.1f}% de compatibilidade visual")
-
-    lines.append("\n" + "=" * 80)
-    report_text = "\n".join(lines)
-
-    print("\n" + report_text)
-    out_file = BASE_DIR / "resumo_investigacao.txt"
-    out_file.write_text(report_text, encoding="utf-8")
-    print(f"\n📄 Relatório salvo automaticamente em: {out_file.name}")
-
-    return report_text
+def route_rows(case_dir: Path, search_id: int) -> tuple:
+    db = CaseDB(case_dir / "sentinel.db")
+    s, hits = db.search_rows(search_id)
+    trk = {(t["camera_id"], t["local_id"]): t for t in db.tracklets()}
+    info = db.info()
+    db.close()
+    rows = []
+    for step, cam, lid, score, prob, margin, decision, by in hits:
+        t = trk.get((cam, lid))
+        if t is None:
+            continue
+        rows.append({
+            "t_start": t["t_start"], "inicio": hms(t["t_start"]), "fim": hms(t["t_end"]), "camera": cam,
+            "local_id": lid, "prob": "ÂNCORA" if decision == "ancora" else f"{prob:.0%}",
+            "score": f"{score:.3f}", "margem": "-" if margin is None else f"{margin:+.3f}",
+            "decisao": decision, "decidido_por": by, "crops": case_dir / t["crops_path"],
+            "cores": f"camisa {t['attrs'].get('camisa') or '?'} / calça {t['attrs'].get('calca') or '?'}",
+        })
+    return s, rows, info
 
 
-if __name__ == "__main__":
-    export_investigation_summary()
+def export_search_report(case_dir: Path, search_id: int | None = None) -> str:
+    if search_id is None:
+        db = CaseDB(case_dir / "sentinel.db")
+        search_id = db.latest_search_id()
+        db.close()
+    if search_id is None:
+        return "Nenhuma caçada neste caso."
+    s, rows, info = route_rows(case_dir, search_id)
+    calib = json.loads(s[5])
+    route = sorted((r for r in rows if r["decisao"] in ("ancora", "aceito")), key=lambda r: r["t_start"])
+    rejected = [r for r in rows if r["decisao"] == "rejeitado"]
+    others = [r for r in rows if r["decisao"] == "nao_aceito"]
+
+    L = ["=" * 90, f"SENTINEL-TRACE — CASO {case_dir.name} — CAÇADA #{search_id}", "=" * 90]
+    for k in ("investigador", "associado", "descricao", "observacoes"):
+        if info.get(k):
+            L.append(f"{k.capitalize():<13}: {info[k]}")
+    L += [f"Âncora       : {s[2]} #{s[3]}",
+          f"Câmeras      : {len({r['camera'] for r in route})} com o alvo",
+          f"Calibração   : {calib.get('source')} (rótulos humanos acumulados: {calib.get('n_rotulos_humanos')})",
+          "-" * 90, "ROTA DO ALVO (horário real):"]
+    for r in route:
+        L.append(f"  {r['inicio']}–{r['fim']}  {r['camera']:<24} #{r['local_id']:<6} prob {r['prob']:>6}  "
+                 f"margem {r['margem']:>7}  {r['cores']:<28} decisão: {r['decidido_por']}")
+    if rejected:
+        L.append("\nREJEITADOS PELO INVESTIGADOR:")
+        L += [f"  {r['inicio']}  {r['camera']:<24} #{r['local_id']:<6} prob {r['prob']}" for r in rejected]
+    if others:
+        L.append("\nMELHORES CANDIDATOS NÃO AVALIADOS (revisar se o alvo pode ter sido perdido):")
+        L += [f"  {r['inicio']}  {r['camera']:<24} #{r['local_id']:<6} prob {r['prob']}" for r in others]
+    L += ["", "prob = chance estimada de ser a mesma pessoa (melhora a cada decisão humana).",
+          "margem = vantagem sobre o concorrente simultâneo na mesma câmera (perto de 0 = ambíguo).", "=" * 90]
+    text = "\n".join(L)
+    (case_dir / f"cacada_{search_id}.txt").write_text(text, encoding="utf-8")
+    evidence_board(route, case_dir / f"cacada_{search_id}_evidencias.jpg")
+    return text
+
+
+def evidence_board(route: list[dict], out_path: Path, width=1500, h=150):
+    rows = []
+    for r in route:
+        img = cv2.imread(str(r["crops"]))
+        if img is None:
+            continue
+        img = cv2.resize(img, (max(1, int(img.shape[1] * h / img.shape[0])), h))
+        canvas = np.full((h + 28, width, 3), 25, np.uint8)
+        canvas[28:, :min(width, img.shape[1])] = img[:, :width]
+        label = "ANCORA" if r["decisao"] == "ancora" else f"{r['prob']} ({r['decidido_por']})"
+        cv2.putText(canvas, f"{r['inicio']}  {r['camera']} #{r['local_id']}  {label}", (6, 20), 0, 0.6, (0, 255, 255), 2)
+        rows.append(canvas)
+    if rows:
+        cv2.imwrite(str(out_path), np.vstack(rows))

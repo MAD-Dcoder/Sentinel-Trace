@@ -1,0 +1,21 @@
+# Registro de câmeras da investigação.
+#
+# start_time = horário REAL do frame 0 da exportação (relógio OSD do XProtect).
+# É ele que sincroniza as câmeras na linha do tempo comum — sem isso, não há
+# correlação temporal entre câmeras. Precisão atual: ±0.3 s (lido a olho no OSD).
+#
+# Arquivos em data/ que não estiverem listados aqui também são varridos, assumindo
+# que começam no mesmo instante que a primeira câmera listada.
+
+cameras:
+  cam_01_corredor_baixo:
+    file: cam_01_corredor_baixo.mp4.MP4
+    start_time: "2026-11-11T07:53:11.3"
+
+  cam_02_corredor_medio:
+    file: cam_02_corredor_medio.mp4.MP4
+    start_time: "2026-11-11T07:53:10.8"
+
+  cam_03_visao_teto:
+    file: cam_03_visao_teto.MP4
+    start_time: "2026-11-11T07:53:11.8"

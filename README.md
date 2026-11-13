@@ -45,3 +45,31 @@ Ao combinar **YOLOv8** para deteção em tempo real, **ByteTrack** para tracking
  │ Dashboard       │<──────│ Base Vetorial   │<──────│ OSNet (ReID)    │
  │ Streamlit / Rel │       │ Cosine Distance │       │ 512-d Vectors   │
  └─────────────────┘       └─────────────────┘       └─────────────────┘
+## 🚀 Como usar
+
+```bash
+python main.py            # abre a interface em http://localhost:8501
+python main.py --rede     # permite acesso de outros PCs da rede
+```
+
+1. **Nova investigação** — câmera de início (ex.: catraca), data/horário, janela ± segundos e, se souber, cor da camisa/calça.
+2. **Quem é o alvo?** — o Sentinel varre só aquela câmera naquela janela e lista as pessoas (quem bate com a descrição primeiro).
+3. **Caçada** — a cada rodada ele varre só as câmeras sugeridas, logo após o último avistamento; você confirma ✅ ou rejeita ❌.
+4. **Laudo** — rota cronológica, prancha de evidências e .docx.
+
+Nada roda sem você pedir. Trechos já varridos no caso não são reprocessados. Cada confirmação ensina o Sentinel:
+calibra a % de semelhança e registra a passagem câmera A → B (o mapa do galpão se monta sozinho, em `db/conhecimento.db`).
+
+### Instalação (uma vez)
+
+```bash
+pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+# ReID (OSNet-AIN x1.0 / MSMT17, torchreid model zoo, MIT) — ~17 MB
+curl -L -o models/osnet_ain_x1_0_msmt17.pth "https://drive.usercontent.google.com/download?id=1SigwBE6mPdqiJMqhuIY4aqC7--5CsMal&export=download&confirm=t"
+# Detector otimizado para CPU Intel (OpenVINO)
+python -c "from ultralytics import YOLO; YOLO('yolov8s.pt').export(format='openvino', imgsz=(736,1280))"
+move yolov8s_openvino_model models\yolov8s_1280_openvino_model
+```
+
+Coloque as exportações do XProtect em `data/` e o horário real do frame 0 de cada uma em `config/cameras.yaml`.
+`casos/` guarda recortes de pessoas (**dado biométrico — nunca versionar nem compartilhar**).

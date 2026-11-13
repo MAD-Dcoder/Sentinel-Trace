@@ -1,75 +1,59 @@
 """
-Módulo de Geração de Relatórios Periciais - Sentinel-Trace.
-Compila timelines forenses e evidências de rastreio em documentos formais (.docx).
+Laudo pericial (.docx) de uma busca de alvo — Sentinel-Trace.
 """
 
 from datetime import datetime, timezone
 from io import BytesIO
-import pandas as pd
+from pathlib import Path
+
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 
-def generate_forensic_report(global_id: int, events_df: pd.DataFrame) -> BytesIO:
-    """
-    Gera um relatório forense formal contendo metadados do incidente,
-    sumário executivo e a cronologia de rastreamento entre câmaras.
-    """
+def generate_forensic_report(search_id: int, anchor: str, route: list[dict], calibration: dict,
+                             evidence_image: Path | None = None) -> BytesIO:
+    """route: [{camera, local_id, inicio, fim, prob, score, margem, decidido_por}, ...] em ordem cronológica."""
     doc = Document()
+    run = doc.add_heading(level=0).add_run("SENTINEL-TRACE — LAUDO DE BUSCA FORENSE")
+    run.font.size, run.font.bold, run.font.color.rgb = Pt(18), True, RGBColor(15, 23, 42)
 
-    # Configuração de estilo de cabeçalho
-    title = doc.add_heading(level=0)
-    run_title = title.add_run("🛡️ SENTINEL-TRACE — LAUDO DE AUDITORIA FORENSE")
-    run_title.font.size = Pt(18)
-    run_title.font.bold = True
-    run_title.font.color.rgb = RGBColor(15, 23, 42)
+    meta = doc.add_paragraph()
+    meta.add_run(f"Emissão: {datetime.now(timezone.utc):%d/%m/%Y %H:%M:%S} UTC\n").italic = True
+    meta.add_run(f"Busca #{search_id} | Âncora: {anchor}\n").bold = True
+    meta.add_run(f"Câmeras com o alvo: {len({r['camera'] for r in route})}\n")
 
-    # Subtítulo com dados do documento
-    now_str = datetime.now(timezone.utc).strftime("%d/%m/%Y às %H:%M:%S UTC")
-    p_meta = doc.add_paragraph()
-    p_meta.add_run(f"Data de Emissão: {now_str}\n").italic = True
-    p_meta.add_run(f"Identificador Auditado: ID Global #{global_id}\n").bold = True
-    p_meta.add_run("Natureza: Rastreamento Cross-Camera e Prevenção de Perdas\n")
-
-    doc.add_heading("1. Sumário do Incidente", level=1)
-    p_summary = doc.add_paragraph(
-        "Este documento consolida os registros extraídos automaticamente pelo pipeline do Sentinel-Trace. "
-        "A identificação e a correlação entre câmaras foram estabelecidas via vetores biométricos corporais (ReID), "
-        "garantindo conformidade com a privacidade individual e isolamento pericial dos dados."
-    )
-
-    doc.add_heading("2. Trajetória Cronológica Identificada", level=1)
-
-    if events_df.empty:
-        doc.add_paragraph("Nenhum registro encontrado para este identificador.")
-    else:
-        # Criação da tabela de evidências
-        table = doc.add_table(rows=1, cols=4)
-        table.style = "Table Grid"
-
-        hdr_cells = table.rows[0].cells
-        headers = ["Câmara / Ponto", "Data e Hora (UTC)", "Track Local", "Coordenadas (Bounding Box)"]
-        for i, header_text in enumerate(headers):
-            hdr_cells[i].text = header_text
-            hdr_cells[i].paragraphs[0].runs[0].font.bold = True
-
-        for _, row in events_df.iterrows():
-            row_cells = table.add_row().cells
-            row_cells[0].text = str(row["camera_id"])
-            row_cells[1].text = str(row["timestamp"])
-            row_cells[2].text = str(row["local_track_id"])
-            bbox_str = f"[{row['bbox_x1']}, {row['bbox_y1']}, {row['bbox_x2']}, {row['bbox_y2']}]"
-            row_cells[3].text = bbox_str
-
-    doc.add_heading("3. Declaração de Integridade", level=1)
+    doc.add_heading("1. Método", level=1)
     doc.add_paragraph(
-        "Os registros acima refletem os dados persistidos no banco relacional e vetorial de auditoria. "
-        "A integridade dos vetores matemáticos assegura a rastreabilidade entre diferentes feeds de CCTV."
-    )
+        "O alvo foi indicado pelo investigador na câmera âncora. As demais aparições foram ranqueadas por "
+        "similaridade corporal (ReID OSNet-AIN, sem reconhecimento facial) entre conjuntos de recortes, e cada "
+        "trecho incluído na rota foi confirmado pelo investigador ou, quando indicado, aceito automaticamente. "
+        "Horários são o relógio real das exportações do VMS.")
+    doc.add_paragraph(
+        f"Calibração: {calibration.get('source')} — genuínos={calibration.get('n_genuinos')}, "
+        f"impostores={calibration.get('n_impostores')}, rótulos humanos={calibration.get('n_rotulos_humanos')}. "
+        "A probabilidade é indicativa; a decisão final é humana.")
 
-    # Salva o arquivo em buffer de memória para download direto
-    file_stream = BytesIO()
-    doc.save(file_stream)
-    file_stream.seek(0)
-    return file_stream
+    doc.add_heading("2. Rota cronológica do alvo", level=1)
+    cols = ["Início", "Fim", "Câmera", "Rastro", "Prob.", "Score", "Margem", "Decisão"]
+    table = doc.add_table(rows=1, cols=len(cols))
+    table.style = "Table Grid"
+    for cell, h in zip(table.rows[0].cells, cols):
+        cell.text = h
+        cell.paragraphs[0].runs[0].font.bold = True
+    for r in route:
+        vals = [r["inicio"], r["fim"], r["camera"], f"#{r['local_id']}", r["prob"], r["score"], r["margem"],
+                r["decidido_por"]]
+        for cell, v in zip(table.add_row().cells, vals):
+            cell.text = str(v)
+
+    if evidence_image and Path(evidence_image).exists():
+        doc.add_heading("3. Evidências visuais", level=1)
+        doc.add_picture(str(evidence_image), width=Inches(6.5))
+
+    doc.add_heading("4. Integridade", level=1)
+    doc.add_paragraph("Registros extraídos do banco da sessão (sentinel.db), incluindo candidatos rejeitados e "
+                      "não aceitos, para permitir revisão independente.")
+    buf = BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf

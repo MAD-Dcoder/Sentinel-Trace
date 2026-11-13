@@ -1,0 +1,8 @@
+# ByteTrack para corredores de galpão (bins & carrinhos). Uma instância por câmera.
+tracker_type: bytetrack
+track_high_thresh: 0.25  # Aceita meio-corpo (atrás de carrinhos) na 1ª associação
+track_low_thresh: 0.08   # Recupera silhuetas distantes/borradas na 2ª associação
+new_track_thresh: 0.30   # Evita rastros fantasmas
+track_buffer_sec: 8.0    # Memória de oclusão em SEGUNDOS (convertido para frames conforme PROCESS_FPS)
+match_thresh: 0.85       # Tolerância espacial quando associados se cruzam
+fuse_score: True
