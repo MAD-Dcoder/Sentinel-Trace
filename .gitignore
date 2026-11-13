@@ -24,3 +24,6 @@ db/*.db
 
 # Configurações locais
 .env
+
+# Documentos de apresentação (ficam só local)
+docs/
