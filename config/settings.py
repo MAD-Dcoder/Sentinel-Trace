@@ -22,7 +22,7 @@ MOTION_WIDTH = 640             # Resolução da miniatura usada para checar movi
 MOTION_MIN_PIXELS = 20         # Pixels mudando (na miniatura, já sem tremor) para considerar movimento
 MOTION_IGNORE_BOTTOM = 0.14    # Faixa inferior ignorada (relógio/marca d'água do VMS)
 MOTION_HOLD_S = 2.0            # Mantém a IA ligada por N s depois do último movimento
-IDLE_DETECT_EVERY = 3          # Sem movimento mas com pessoa rastreada (parada no bin): detecta 1 a cada N amostras
+IDLE_DETECT_EVERY = 3          # Sem movimento mas com pessoa rastreada (parada na prateleira): detecta 1 a cada N amostras
 
 # --- Detecção --------------------------------------------------------------
 # OpenVINO (otimizado para CPU Intel): ~2.2x mais rápido que PyTorch e com recall igual ou maior nos testes.

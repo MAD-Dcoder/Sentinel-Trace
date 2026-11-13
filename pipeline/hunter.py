@@ -3,7 +3,7 @@ Motor de caçada sob demanda — Sentinel-Trace.
 
 Fluxo (nada roda sem o investigador pedir):
   1. Investigação: o investigador diz câmera de início (ex.: catraca), horário e,
-     opcionalmente, como o associado estava vestido.
+     opcionalmente, como a pessoa estava vestida.
   2. Localizar: o Sentinel varre SÓ aquela câmera, SÓ ±N segundos daquele horário,
      e mostra as pessoas encontradas — primeiro as que batem com a descrição.
   3. Alvo: o investigador escolhe quem é. Isso vira a âncora (o "target").
@@ -107,7 +107,7 @@ class Case:
             if not moving:
                 idle += 1
             # Sem movimento e ninguém rastreado: corredor vazio, pula a IA.
-            # Sem movimento mas com alguém rastreado (parado no bin): detecta de vez em quando.
+            # Sem movimento mas com alguém rastreado (parado na prateleira): detecta de vez em quando.
             if not moving and (not tracker.has_active or idle % IDLE_DETECT_EVERY):
                 continue
             if moving:

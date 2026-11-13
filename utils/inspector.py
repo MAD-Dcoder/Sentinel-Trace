@@ -53,10 +53,12 @@ def export_search_report(case_dir: Path, search_id: int | None = None) -> str:
     rejected = [r for r in rows if r["decisao"] == "rejeitado"]
     others = [r for r in rows if r["decisao"] == "nao_aceito"]
 
+    info.setdefault("investigado", info.pop("associado", None))   # casos antigos
     L = ["=" * 90, f"SENTINEL-TRACE — CASO {case_dir.name} — CAÇADA #{search_id}", "=" * 90]
-    for k in ("investigador", "associado", "descricao", "observacoes"):
+    for k, nome in (("investigador", "Investigador"), ("investigado", "Investigado"),
+                    ("descricao", "Descrição"), ("observacoes", "Observações")):
         if info.get(k):
-            L.append(f"{k.capitalize():<13}: {info[k]}")
+            L.append(f"{nome:<13}: {info[k]}")
     L += [f"Âncora       : {s[2]} #{s[3]}",
           f"Câmeras      : {len({r['camera'] for r in route})} com o alvo",
           f"Calibração   : {calib.get('source')} (rótulos humanos acumulados: {calib.get('n_rotulos_humanos')})",

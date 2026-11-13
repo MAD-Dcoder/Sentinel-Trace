@@ -42,7 +42,7 @@
 
 ## 📌 Visão geral
 
-Em centros de distribuição com **centenas de câmeras**, reconstruir o trajeto de um associado exige horas de playback manual — e rastreadores comuns "perdem" a pessoa quando ela troca de câmera, passa atrás de estantes ou empurra carrinhos que escondem o corpo.
+Em centros de distribuição com **centenas de câmeras**, reconstruir o trajeto de uma pessoa exige horas de playback manual — e rastreadores comuns "perdem" a pessoa quando ela troca de câmera, passa atrás de estantes ou empurra carrinhos que escondem o corpo.
 
 O **Sentinel-Trace** inverte a lógica: em vez de monitorar tudo o tempo todo, ele é um **motor de busca forense sob demanda**. O investigador diz *onde e quando* a pessoa estava (ex.: a catraca onde bateu o crachá), escolhe o alvo, e o Sentinel o segue câmera a câmera, mostrando os candidatos mais parecidos para confirmação humana — até entregar um **laudo com rota cronológica e evidências**.
 
@@ -163,7 +163,7 @@ flowchart LR
 
 ## 📊 Desempenho
 
-> Medido em **Intel Core i5-11400F (6 núcleos), sem GPU**, com três gravações reais de um corredor de picking (câmera baixa 1080p, média 1080p e teto 4K).
+> Medido em **Intel Core i5-11400F (6 núcleos), sem GPU**, com três gravações reais de um corredor de estoque (câmera baixa 1080p, média 1080p e teto 4K).
 
 **Detector** — tempo por frame e pessoas detectadas em 36 frames:
 
@@ -183,7 +183,7 @@ flowchart LR
 | Montar o acervo (3 vídeos) | horário digitado à mão | **4 s** (0,1 s com cache) |
 | Pessoas diferentes confundidas pelo ReID | **26%** (ResNet18 + cor) | separadas pelo OSNet |
 
-**Validação:** o associado de teste foi encontrado **no topo do ranking nas 3 câmeras**, todos marcados com a cor de camisa correta. Validação ampla (dezenas de câmeras, horas de vídeo) em andamento.
+**Validação:** a pessoa de teste foi encontrada **no topo do ranking nas 3 câmeras**, todos marcados com a cor de camisa correta. Validação ampla (dezenas de câmeras, horas de vídeo) em andamento.
 
 ---
 

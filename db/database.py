@@ -2,7 +2,7 @@
 Persistência — Sentinel-Trace.
 
 CaseDB  (casos/<caso>/sentinel.db) — tudo de UMA investigação:
-  case_info   dados do caso (investigador, associado, descrição do alvo)
+  case_info   dados do caso (investigador, pessoa investigada, descrição do alvo)
   cameras     câmeras e horário real de início de cada gravação
   coverage    trechos (câmera, início, fim) já varridos — nunca processa o mesmo trecho 2x
   detections  caixas rastreadas (sem assinatura biométrica)

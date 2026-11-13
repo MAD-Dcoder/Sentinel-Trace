@@ -132,7 +132,7 @@ if S.stage == "novo":
         c1, c2 = st.columns(2)
         nome = c1.text_input("Nome do caso", value=f"caso_{datetime.now():%Y%m%d_%H%M}")
         investigador = c2.text_input("Investigador")
-        associado = st.text_input("Associado (nome / matrícula / crachá) — opcional")
+        investigado = st.text_input("Pessoa investigada (nome / matrícula / crachá) — opcional")
         st.markdown("**Onde começar** (ex.: câmera da catraca onde ele bateu o crachá)")
         c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
         cam = c1.selectbox("Câmera de início", list(cams), format_func=cam_label)
@@ -155,7 +155,7 @@ if S.stage == "novo":
         when = datetime.combine(dia, datetime.strptime(hh, "%H:%M:%S").time())
         wanted = {k: v for k, v in (("camisa", camisa), ("calca", calca)) if v != "não sei"}
         case = Case(engine, re.sub(r"[^\w\-]", "_", nome))
-        case.db.set_info({"investigador": investigador, "associado": associado, "cores": wanted,
+        case.db.set_info({"investigador": investigador, "investigado": investigado, "cores": wanted,
                           "descricao": ", ".join(f"{k} {v}" for k, v in wanted.items()) + (f", boné {bone}" if bone != "não sei" else ""),
                           "observacoes": obs, "inicio": {"camera": cam, "horario": when.isoformat(), "janela": janela}})
         S.case, S.wanted = case, wanted
