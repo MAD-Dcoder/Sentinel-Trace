@@ -1,21 +1,17 @@
-# Registro de câmeras da investigação.
+# Registro OPCIONAL de câmeras.
 #
-# start_time = horário REAL do frame 0 da exportação (relógio OSD do XProtect).
-# É ele que sincroniza as câmeras na linha do tempo comum — sem isso, não há
-# correlação temporal entre câmeras. Precisão atual: ±0.3 s (lido a olho no OSD).
+# Não é mais preciso preencher nada: basta exportar do Smart Client para a pasta data/
+# (pode usar subpastas). O Sentinel tira o nome da câmera do nome do arquivo e lê o
+# horário real do relógio gravado na imagem.
 #
-# Arquivos em data/ que não estiverem listados aqui também são varridos, assumindo
-# que começam no mesmo instante que a primeira câmera listada.
+# Use este arquivo só para:
+#   - dar um apelido amigável à câmera (label), ex.: "Catraca Norte";
+#   - corrigir o horário quando o relógio não puder ser lido (start_time).
+#
+# cameras:
+#   cam_01_corredor_baixo:
+#     file: cam_01_corredor_baixo.mp4.MP4
+#     label: "Corredor P-1 (baixa)"
+#     start_time: "2026-11-11T07:53:11.3"     # opcional
 
 cameras:
-  cam_01_corredor_baixo:
-    file: cam_01_corredor_baixo.mp4.MP4
-    start_time: "2026-11-11T07:53:11.3"
-
-  cam_02_corredor_medio:
-    file: cam_02_corredor_medio.mp4.MP4
-    start_time: "2026-11-11T07:53:10.8"
-
-  cam_03_visao_teto:
-    file: cam_03_visao_teto.MP4
-    start_time: "2026-11-11T07:53:11.8"

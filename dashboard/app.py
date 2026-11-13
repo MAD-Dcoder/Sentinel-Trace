@@ -99,7 +99,22 @@ with st.sidebar:
         dot = ['digraph G { rankdir=LR; node [shape=box, style="filled,rounded", fillcolor="#1E293B", fontcolor="white"];']
         dot += [f'"{a}" -> "{b}" [label="{n}x ~{dt:.0f}s"];' for a, b, n, dt in edges]
         st.graphviz_chart("\n".join(dot + ["}"]))
-    st.caption(f"Detector: {engine.detector.backend} · {len(cams)} câmeras no acervo")
+    st.divider()
+    with st.expander(f"📼 Acervo: {len(cams)} câmeras", expanded=bool(engine.archive.problems)):
+        st.caption("Exporte do Smart Client para a pasta data/ (subpastas valem). Nome e horário são lidos sozinhos.")
+        for c in sorted(cams.values(), key=lambda c: c.camera_id):
+            icon = "🕒" if c.time_source.startswith("relógio") else "✍️"
+            st.markdown(f"**{c.label or c.camera_id}**  \n{icon} {c.start_time:%d/%m %H:%M:%S} → "
+                        f"{c.end_time:%H:%M:%S} · {c.width}×{c.height}  \n<small>{c.time_source}</small>",
+                        unsafe_allow_html=True)
+        for p in engine.archive.problems:
+            st.warning(p)
+        if st.button("🔄 Recarregar acervo", width="stretch"):
+            from core.video import VideoArchive
+            with st.spinner("Lendo vídeos novos..."):
+                engine.archive = VideoArchive()
+            st.rerun()
+    st.caption(f"Detector: {engine.detector.backend}")
 
 S.setdefault("stage", "novo")
 

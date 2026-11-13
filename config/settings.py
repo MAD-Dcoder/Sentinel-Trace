@@ -2,15 +2,19 @@
 Configurações globais do Sentinel-Trace (busca forense sob demanda, alvo primeiro).
 """
 
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 MODELS_DIR = BASE_DIR / "models"
-CASES_DIR = BASE_DIR / "casos"                 # Uma pasta por investigação (banco + crops = dado biométrico)
-KNOWLEDGE_DB = BASE_DIR / "db" / "conhecimento.db"   # Aprendizado entre casos: topologia + calibração (sem imagens)
+# SENTINEL_CASOS / SENTINEL_CONHECIMENTO permitem apontar para outro lugar (ex.: testes, outro disco)
+CASES_DIR = Path(os.environ.get("SENTINEL_CASOS", BASE_DIR / "casos"))   # Uma pasta por investigação (banco + crops = dado biométrico)
+KNOWLEDGE_DB = Path(os.environ.get("SENTINEL_CONHECIMENTO", BASE_DIR / "db" / "conhecimento.db"))   # Aprendizado entre casos (sem imagens)
 CAMERAS_CONFIG_PATH = BASE_DIR / "config" / "cameras.yaml"
 TRACKER_CONFIG_PATH = BASE_DIR / "config" / "warehouse_tracker.yaml"
+OSD_FONT_PATH = BASE_DIR / "config" / "osd_font.npz"   # "Fonte" aprendida do relógio gravado na imagem
+ARCHIVE_INDEX = DATA_DIR / ".sentinel_acervo.json"     # Cache do que já foi lido de cada vídeo
 
 # --- Leitura de vídeo ------------------------------------------------------
 SAMPLE_FPS = 4.0               # Frames analisados por segundo de vídeo (pessoa andando ~1.4 m/s => ~35 cm entre amostras)
