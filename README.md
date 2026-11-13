@@ -78,14 +78,11 @@ O **Sentinel-Trace** inverte a lógica: em vez de monitorar tudo o tempo todo, e
 
 ```mermaid
 flowchart LR
-    A["🗂️ Nova investigação<br/>câmera · horário · roupa"] --> B["🔎 Localizar<br/>só aquela janela"]
-    B --> C["🎯 Escolher o alvo<br/>'É este'"]
-    C --> D["🐾 Caçada em rodadas<br/>câmeras prováveis"]
-    D --> E{"Investigador<br/>confirma?"}
-    E -- "✅ É ele" --> F["Galeria do alvo cresce<br/>+ mapa aprendido"]
-    F --> D
-    E -- "❌ Não é" --> D
-    D --> G["📄 Laudo<br/>rota · evidências · .docx"]
+    A["🗂️ Caso<br/>câmera · horário · roupa"] --> B["🔎 Localizar<br/>só aquela janela"]
+    B --> C["🎯 Alvo<br/>É este"]
+    C --> D["🐾 Caçada<br/>rodadas ✅ / ❌"]
+    D --> E["📄 Laudo<br/>rota · evidências"]
+    D -- "cada ✅ amplia a<br/>memória do alvo" --> D
 ```
 
 | Etapa | O que acontece |
@@ -101,34 +98,27 @@ flowchart LR
 ## 🏗️ Arquitetura
 
 ```mermaid
-flowchart TB
-    subgraph IN["📼 Acervo"]
-        V["Exportações do<br/>Smart Client"] --> O["Relógio OSD<br/>+ nome do arquivo"]
-    end
-    subgraph SCAN["⚙️ Varredura sob demanda"]
-        W["Janela de tempo<br/>4 fps"] --> M{"Movimento?"}
-        M -- não --> SKIP["pula a IA"]
-        M -- sim --> DET["YOLOv8s<br/>OpenVINO"]
-        DET --> TRK["ByteTrack<br/>por câmera"]
-        TRK --> TL["Tracklet<br/>top-10 recortes"]
-        TL --> REID["OSNet-AIN<br/>assinatura 512-d"]
-        TL --> ATT["Cor de camisa<br/>e calça"]
-    end
-    subgraph MATCH["🧮 Decisão"]
-        REID --> SS["Similaridade<br/>entre conjuntos"]
-        SS --> CAL["Calibração<br/>logística"]
-        CAL --> UI["Interface<br/>✅ / ❌"]
-    end
-    subgraph KNOW["📚 Conhecimento"]
-        UI --> TOPO["Mapa de câmeras<br/>tempos de trânsito"]
-        UI --> LAB["Rótulos de<br/>calibração"]
-    end
-    O --> W
-    ATT --> UI
-    TOPO -. sugere câmeras .-> W
-    LAB -. melhora a % .-> CAL
+flowchart LR
+    V["📼 Acervo<br/>exportações +<br/>relógio OSD"] --> M{"Movimento?"}
+    M -- "não" --> X["pula a IA"]
+    M -- "sim" --> DET["🔍 YOLOv8s<br/>OpenVINO"]
+    DET --> TRK["🧵 ByteTrack<br/>por câmera"]
+    TRK --> TL["🖼️ Top-10<br/>recortes"]
+    TL --> REID["🧠 OSNet-AIN<br/>assinatura 512-d"]
+    REID --> CAL["🧮 Similaridade<br/>+ calibração"]
+    CAL --> UI["🙋 Investigador<br/>✅ / ❌"]
     UI --> REP["📄 Laudo"]
+    UI -.-> K[("📚 Conhecimento<br/>mapa + calibração")]
+    K -. "sugere câmeras" .-> V
 ```
+
+| Camada | Economia aplicada |
+|---|---|
+| 📼 **Acervo** | Lê só a janela de tempo pedida, a 4 fps; trecho já varrido fica em cache |
+| 🎬 **Movimento** | Comparar miniaturas custa ~2 ms; a IA (~270 ms) só roda quando algo se mexe |
+| 🔍 **Detector** | YOLOv8s exportado para OpenVINO, entrada 1280×736 |
+| 🖼️ **Top-10** | ReID só nos 10 melhores recortes de cada pessoa |
+| 📚 **Conhecimento** | Passagens aprendidas reduzem as câmeras de cada rodada |
 
 <details>
 <summary><b>🧩 Algoritmos-chave</b> (clique para expandir)</summary>
